@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sistema Solar 3D · Simulacion fisica con datos reales</title>
+  <link rel="stylesheet" href="styles.css?v=5" />
+</head>
+<body>
+  <!-- Lienzo 3D -->
+  <div id="scene"></div>
+
+  <!-- Pantalla de carga -->
+  <div id="loader">
+    <div class="loader-box">
+      <div class="spinner"></div>
+      <p>Cargando el Sistema Solar…</p>
+      <small id="loader-msg">Inicializando Three.js</small>
+    </div>
+  </div>
+
+  <!-- Panel de controles (arriba a la derecha) -->
+  <section id="controls">
+    <button id="btn-play" title="Pausar / Reanudar">⏸ Pausar</button>
+
+    <label class="ctrl">
+      <span>Velocidad del tiempo: <b id="speed-val">Tiempo real</b></span>
+      <input id="speed" type="range" min="0" max="1000" step="1" value="0" />
+    </label>
+
+    <label class="ctrl checkbox">
+      <input id="toggle-orbits" type="checkbox" checked /> Mostrar orbitas
+    </label>
+    <label class="ctrl checkbox">
+      <input id="toggle-labels" type="checkbox" checked /> Mostrar nombres
+    </label>
+
+    <button id="btn-reset" title="Volver a la vista general">🛰 Vista general</button>
+  </section>
+
+  <!-- Lista de cuerpos (arriba a la izquierda) -->
+  <nav id="body-list">
+    <input id="body-search" type="search" placeholder="Buscar cuerpo…" autocomplete="off" />
+    <ul id="body-list-items"></ul>
+  </nav>
+
+  <!-- Panel de informacion (abajo / lateral) -->
+  <aside id="info-panel" class="hidden">
+    <button id="info-close" title="Cerrar">✕</button>
+    <h2 id="info-name">—</h2>
+    <p id="info-type" class="subtitle">—</p>
+    <div id="info-grid"></div>
+    <p id="info-fact" class="fact">—</p>
+  </aside>
+
+  <!-- Three.js (UMD) + OrbitControls (copias locales, funcionan sin internet) -->
+  <script src="vendor/three.min.js"></script>
+  <script src="vendor/OrbitControls.js"></script>
+  <!-- Texturas reales incrustadas en base64 (funcionan sin conexion) -->
+  <script src="textures.js?v=3"></script>
+  <!-- Datos y logica -->
+  <script src="data.js?v=3"></script>
+  <script src="spacecraft.js?v=1"></script>
+  <script src="main.js?v=8"></script>
+</body>
+</html>

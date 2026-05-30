@@ -1,0 +1,18 @@
+CRÉDITOS Y LICENCIAS
+====================
+
+Texturas de los planetas, el Sol, la Luna, los anillos de Saturno y el
+fondo estelar de la Via Lactea:
+  © Solar System Scope — https://www.solarsystemscope.com/textures
+  Licencia: Creative Commons Attribution 4.0 International (CC BY 4.0)
+  https://creativecommons.org/licenses/by/4.0/
+  Las imágenes están incrustadas en base64 dentro de "textures.js" para que
+  la aplicación funcione sin conexión a internet.
+
+Motor 3D:
+  Three.js (r128) — https://threejs.org — Licencia MIT
+  OrbitControls — Three.js examples — Licencia MIT
+
+Datos físicos y orbitales:
+  NASA Planetary Fact Sheet / IAU (valores reales de masa, radio, gravedad,
+  distancias, periodos y satélites).
