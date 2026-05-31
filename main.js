@@ -255,6 +255,26 @@
     return 0.18;
   }
 
+  // Tamaño de la imagen-billboard en unidades del MUNDO (no constante en pantalla):
+  // mantiene las proporciones reales (segun los metros de cada nave) y es fijo, asi que
+  // se encoge con la distancia y de lejos casi no se ve, como un objeto real.
+  // Sube PROBE_VIS_SCALE si las quieres mas grandes; bajalo para acercarte mas al tamaño exacto.
+  const PROBE_VIS_SCALE = 0.012;   // sondas de espacio profundo / orbita solar
+  function probeSizeMeters(s) { return s.size_m || SPACECRAFT_SIZE_M[s.id] || 3.5; }
+  function probeSpriteSize(s) {
+    // Naves que orbitan un PLANETA (ISS, Hubble, James Webb, las de Marte, Akatsuki...):
+    // tamaño RELATIVO a su planeta, como un satelite. A escala real el planeta es diminuto,
+    // asi que un tamaño absoluto grande lo aplastaria; lo ligamos al radio del planeta.
+    if (s.parent && s.parent !== "sol" && s.solarDist_AU === undefined) {
+      const parent = BODIES.find((b) => b.id === s.parent);
+      const base = parent ? visualRadius(parent) : 0.001;
+      const f = clamp(Math.cbrt(probeSizeMeters(s) / 15), 0.55, 1.9); // variacion suave por tamaño real
+      return base * 0.42 * f;
+    }
+    // Espacio profundo y orbita solar: tamaño absoluto visible.
+    return probeSizeMeters(s) * PROBE_VIS_SCALE;
+  }
+
   // ========================= ETIQUETAS HTML =========================
   let labelLayer;
   function buildLabel(body) {
@@ -475,6 +495,42 @@
     });
   }
 
+  // Redibuja la linea de orbita como la ORBITA REAL del planeta (elipse osculadora
+  // a partir de su posicion y velocidad respecto al Sol). El planeta queda exactamente
+  // sobre la linea aunque la fisica newtoniana lo desvie del circulo ideal.
+  // Ademas el vertice 0 se clava en la posicion exacta del planeta (preciso a cualquier zoom).
+  function updateOrbitEllipse(b) {
+    if (!b.orbit || !b.pos) return;
+    const sun = BODIES[0];
+    const rx = b.pos.x - sun.pos.x, rz = b.pos.z - sun.pos.z;          // posicion relativa al Sol (UA)
+    const vx = b.vel.x - sun.vel.x, vz = b.vel.z - sun.vel.z;          // velocidad relativa (UA/año)
+    const r = Math.hypot(rx, rz) || 1e-9;
+    const v2 = vx * vx + vz * vz;
+    const mu = G * (sun.massSolar + b.massSolar);                      // parametro gravitatorio
+    const a = -mu / (2 * (v2 / 2 - mu / r));                           // semieje mayor
+    if (!isFinite(a) || a <= 0) return;
+    const rv = rx * vx + rz * vz;
+    const cc = v2 - mu / r;
+    const ex = (cc * rx - rv * vx) / mu, ez = (cc * rz - rv * vz) / mu; // vector excentricidad
+    const e = Math.hypot(ex, ez);
+    if (e >= 0.98) return;                                             // proteccion (no eliptica)
+    const omega = Math.atan2(ez, ex);                                  // direccion del periapsis
+    const phiNow = Math.atan2(rz, rx);                                 // angulo actual del planeta
+    const thetaNow = phiNow - omega;                                   // anomalia verdadera actual
+    const p = a * (1 - e * e);                                         // semi-latus rectum
+    const attr = b.orbit.geometry.attributes.position, arr = attr.array, n = attr.count;
+    const dth = (Math.PI * 2) / (n - 1);
+    for (let i = 0; i < n; i++) {
+      const th = thetaNow + i * dth;                                   // i=0 -> el planeta exacto
+      const rr = p / (1 + e * Math.cos(th));
+      const phi = phiNow + i * dth;
+      arr[i * 3] = Math.cos(phi) * rr * AU_IN_UNITS;
+      arr[i * 3 + 1] = 0;
+      arr[i * 3 + 2] = Math.sin(phi) * rr * AU_IN_UNITS;
+    }
+    attr.needsUpdate = true;
+  }
+
   // ========================= LUNAS =========================
   function moonVisualRadius(m) {
     if (realSize) return (m.radius_km / AU_KM) * AU_IN_UNITS;        // tamaño real 1:1
@@ -548,6 +604,41 @@
   }
 
   // ========================= SONDAS Y NAVES =========================
+  // crea una textura billboard a partir de la imagen real de la nave;
+  // si la imagen es una foto (fondo opaco) le desvanece los bordes para integrarla en el espacio
+  function makeProbeSprite(dataURI) {
+    const SZ = 256;
+    const cv = document.createElement("canvas"); cv.width = cv.height = SZ;
+    const ctx = cv.getContext("2d");
+    const tex = new THREE.CanvasTexture(cv);
+    tex.colorSpace = THREE.SRGBColorSpace || undefined;
+    const img = new Image();
+    img.onload = () => {
+      // ¿la imagen ya trae fondo transparente (render) o es una foto?
+      const tc = document.createElement("canvas"); tc.width = img.width; tc.height = img.height;
+      const tx = tc.getContext("2d"); tx.drawImage(img, 0, 0);
+      let opaque = 0;
+      [[1, 1], [img.width - 2, 1], [1, img.height - 2], [img.width - 2, img.height - 2]]
+        .forEach((p) => { if (tx.getImageData(p[0], p[1], 1, 1).data[3] > 200) opaque++; });
+      const isPhoto = opaque >= 3;
+      const s = Math.min(SZ / img.width, SZ / img.height);
+      const w = img.width * s, h = img.height * s;
+      ctx.clearRect(0, 0, SZ, SZ);
+      ctx.drawImage(img, (SZ - w) / 2, (SZ - h) / 2, w, h);
+      if (isPhoto) {
+        ctx.globalCompositeOperation = "destination-in";
+        const g = ctx.createRadialGradient(SZ / 2, SZ / 2, SZ * 0.27, SZ / 2, SZ / 2, SZ * 0.5);
+        g.addColorStop(0, "rgba(0,0,0,1)");
+        g.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = g; ctx.fillRect(0, 0, SZ, SZ);
+        ctx.globalCompositeOperation = "source-over";
+      }
+      tex.needsUpdate = true;
+    };
+    img.src = dataURI;
+    return tex;
+  }
+
   function buildSpacecraft() {
     if (typeof SPACECRAFT === "undefined") return;
     // contar sondas por planeta para espaciar orbitas visuales
@@ -578,12 +669,24 @@
       core.scale.setScalar(Math.max(probeRadius, 0.0001));
       group.add(core);
 
+      // billboard con la imagen real de la nave, a tamaño fijo (proporciones reales)
+      if (typeof PROBE_IMG !== "undefined" && PROBE_IMG[s.id]) {
+        const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+          map: makeProbeSprite(PROBE_IMG[s.id]), transparent: true, depthWrite: false,
+        }));
+        const sw = probeSpriteSize(s);
+        sprite.scale.set(sw, sw, 1);
+        group.add(sprite);
+        s.sprite = sprite; s.spriteSize = sw;
+        core.visible = false; // la imagen sustituye al nucleo
+      }
+
       // hitbox invisible para clic
       const hit = new THREE.Mesh(
         new THREE.SphereGeometry(1, 8, 8),
         new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false })
       );
-      hit.scale.setScalar(Math.max(probeRadius * 60, 1.5));
+      hit.scale.setScalar(s.sprite ? Math.max(s.spriteSize * 0.6, 0.004) : Math.max(probeRadius * 60, 1.5));
       hit.userData.body = s;
       group.add(hit); hitboxes.push(hit);
 
@@ -631,11 +734,50 @@
         const ang = s.phase + 2 * Math.PI * (simTime / period_years);
         s.group.position.set(pp.x + Math.cos(ang) * orbitR, pp.y, pp.z + Math.sin(ang) * orbitR);
       }
-
     }
   }
 
   // ========================= FISICA =========================
+  // ===================== POSICIONES REALES (efemerides JPL) =====================
+  // Elementos keplerianos (epoca J2000) + tasa por siglo juliano. Validos ~1800-2050.
+  // [valor J2000, tasa/siglo]: a(UA), e, i(grados), L=long.media, wbar=long.perihelio, Om=long.nodo
+  const PLANET_ELEMENTS = {
+    mercurio: { a:[0.38709927,0.00000037], e:[0.20563593,0.00001906], i:[7.00497902,-0.00594749], L:[252.25032350,149472.67411175], wbar:[77.45779628,0.16047689], Om:[48.33076593,-0.12534081] },
+    venus:    { a:[0.72333566,0.00000390], e:[0.00677672,-0.00004107], i:[3.39467605,-0.00078890], L:[181.97909950,58517.81538729], wbar:[131.60246718,0.00268329], Om:[76.67984255,-0.27769418] },
+    tierra:   { a:[1.00000261,0.00000562], e:[0.01671123,-0.00004392], i:[-0.00001531,-0.01294668], L:[100.46457166,35999.37244981], wbar:[102.93768193,0.32327364], Om:[0.0,0.0] },
+    marte:    { a:[1.52371034,0.00001847], e:[0.09339410,0.00007882], i:[1.84969142,-0.00813131], L:[-4.55343205,19140.30268499], wbar:[-23.94362959,0.44441088], Om:[49.55953891,-0.29257343] },
+    jupiter:  { a:[5.20288700,-0.00011607], e:[0.04838624,-0.00013253], i:[1.30439695,-0.00183714], L:[34.39644051,3034.74612775], wbar:[14.72847983,0.21252668], Om:[100.47390909,0.20469106] },
+    saturno:  { a:[9.53667594,-0.00125060], e:[0.05386179,-0.00050991], i:[2.48599187,0.00193609], L:[49.95424423,1222.49362201], wbar:[92.59887831,-0.41897216], Om:[113.66242448,-0.28867794] },
+    urano:    { a:[19.18916464,-0.00196176], e:[0.04725744,-0.00004397], i:[0.77263783,-0.00242939], L:[313.23810451,428.48202785], wbar:[170.95427630,0.40805281], Om:[74.01692503,0.04240589] },
+    neptuno:  { a:[30.06992276,0.00026291], e:[0.00859048,0.00005105], i:[1.77004347,0.00035372], L:[-55.12002969,218.45945325], wbar:[44.96476227,-0.32241464], Om:[131.78422574,-0.00508664] },
+  };
+
+  // Estado real (posicion + velocidad heliocentricas) proyectado al plano de la ecliptica (UA, UA/año).
+  function realPlanetState(el, T) {
+    const D = Math.PI / 180;
+    const a = el.a[0] + el.a[1] * T, e = el.e[0] + el.e[1] * T;
+    const I = (el.i[0] + el.i[1] * T) * D;
+    const L = el.L[0] + el.L[1] * T, wbar = el.wbar[0] + el.wbar[1] * T;
+    const Om = (el.Om[0] + el.Om[1] * T) * D;
+    const omega = wbar * D - Om;                                       // argumento del perihelio
+    let M = ((((L - wbar) % 360) + 540) % 360 - 180) * D;              // anomalia media (rad)
+    let E = M + e * Math.sin(M);                                       // ecuacion de Kepler
+    for (let k = 0; k < 12; k++) {
+      const dE = (E - e * Math.sin(E) - M) / (1 - e * Math.cos(E));
+      E -= dE; if (Math.abs(dE) < 1e-10) break;
+    }
+    const bb = Math.sqrt(1 - e * e);
+    const xp = a * (Math.cos(E) - e), yp = a * bb * Math.sin(E);       // plano orbital (UA)
+    const n = 2 * Math.PI / Math.pow(a, 1.5), Edot = n / (1 - e * Math.cos(E));
+    const xpd = -a * Math.sin(E) * Edot, ypd = a * bb * Math.cos(E) * Edot;
+    const cw = Math.cos(omega), sw = Math.sin(omega), cO = Math.cos(Om), sO = Math.sin(Om), ci = Math.cos(I);
+    const m11 = cw * cO - sw * sO * ci, m12 = -sw * cO - cw * sO * ci;
+    const m21 = cw * sO + sw * cO * ci, m22 = -sw * sO + cw * cO * ci;
+    return { px: m11 * xp + m12 * yp, pz: m21 * xp + m22 * yp, vx: m11 * xpd + m12 * ypd, vz: m21 * xpd + m22 * ypd };
+  }
+  // Siglos julianos desde J2000 hasta AHORA (se recalcula al abrir la pagina -> siempre el momento real).
+  const T_NOW = (Date.now() / 86400000 + 2440587.5 - 2451545.0) / 36525;
+
   function initPhysics() {
     BODIES.forEach((b, i) => {
       b.massSolar = b.mass_kg / SUN_MASS;
@@ -643,11 +785,17 @@
         b.pos = new THREE.Vector3(0, 0, 0);
         b.vel = new THREE.Vector3(0, 0, 0);
       } else {
-        const a = b.a_AU;
-        const th = i * 2.39996323; // angulo aureo para repartir las posiciones
-        b.pos = new THREE.Vector3(Math.cos(th) * a, 0, Math.sin(th) * a);
-        const v = Math.sqrt(G / a); // velocidad de orbita circular (Msol = 1)
-        b.vel = new THREE.Vector3(-Math.sin(th) * v, 0, Math.cos(th) * v);
+        const el = PLANET_ELEMENTS[b.id];
+        if (el) {
+          const s = realPlanetState(el, T_NOW);   // posicion y velocidad reales de HOY
+          b.pos = new THREE.Vector3(s.px, 0, s.pz);
+          b.vel = new THREE.Vector3(s.vx, 0, s.vz);
+        } else {
+          const a = b.a_AU, th = i * 2.39996323;  // respaldo: reparto circular
+          b.pos = new THREE.Vector3(Math.cos(th) * a, 0, Math.sin(th) * a);
+          const v = Math.sqrt(G / a);
+          b.vel = new THREE.Vector3(-Math.sin(th) * v, 0, Math.cos(th) * v);
+        }
       }
     });
     // fijar el baricentro: la velocidad del Sol cancela el momento total
@@ -797,9 +945,12 @@
       }
     }
 
-    dom.infoGrid.innerHTML = M.map((x) =>
-      `<div class="metric${x.wide ? " wide" : ""}"><span class="k">${x.k}</span><span class="v">${x.v}</span></div>`
-    ).join("");
+    const probeImg = (b.isSpacecraft && typeof PROBE_IMG !== "undefined" && PROBE_IMG[b.id]) ? PROBE_IMG[b.id] : null;
+    dom.infoGrid.innerHTML =
+      (probeImg ? `<img class="info-img" src="${probeImg}" alt="${b.name}" />` : "") +
+      M.map((x) =>
+        `<div class="metric${x.wide ? " wide" : ""}"><span class="k">${x.k}</span><span class="v">${x.v}</span></div>`
+      ).join("");
 
     dom.info.classList.remove("hidden");
   }
@@ -814,7 +965,7 @@
   // ========================= CAMARA: VUELO Y SEGUIMIENTO =========================
   function focusBody(b) {
     followBody = b;
-    const dist = b.isSpacecraft ? 5
+    const dist = b.isSpacecraft ? Math.max((b.spriteSize || 0.1) * 4.5, 0.0015)
       : Math.max((b.isMoon ? moonVisualRadius(b) : visualRadius(b)) * 3.5, 0.0025);
     const dir = camera.position.clone().sub(controls.target).normalize();
     flight = {
@@ -966,6 +1117,7 @@
 
     updateMoons();
     updateSpacecraft();
+    BODIES.forEach(updateOrbitEllipse);   // la linea de orbita sigue la orbita real del planeta
     updateCamera(real);
     controls.update();
     updateLabels();

@@ -119,6 +119,10 @@ input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; c
 .metric .k { display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); }
 .metric .v { display: block; font-size: 14px; font-weight: 600; margin-top: 2px; }
 .metric.wide { grid-column: 1 / -1; }
+.info-img {
+  grid-column: 1 / -1; width: 100%; max-height: 160px; object-fit: contain;
+  border-radius: 9px; background: rgba(255,255,255,.05); padding: 6px; box-sizing: border-box;
+}
 #info-panel .fact {
   margin-top: 14px; font-size: 12.8px; line-height: 1.5; color: #c7d0f0;
   border-left: 2px solid var(--accent); padding-left: 10px;

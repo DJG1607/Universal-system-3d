@@ -9,6 +9,11 @@ fondo estelar de la Via Lactea:
   Las imágenes están incrustadas en base64 dentro de "textures.js" para que
   la aplicación funcione sin conexión a internet.
 
+Imágenes de las sondas y naves (renders e ilustraciones):
+  NASA / JPL-Caltech, ESA, JAXA, CNSA y MBRSC, obtenidas de Wikimedia Commons.
+  La mayoría son obras de la NASA (dominio público); el resto bajo licencias
+  libres de Wikimedia Commons. Reescaladas e incrustadas en "probes.js".
+
 Motor 3D:
   Three.js (r128) — https://threejs.org — Licencia MIT
   OrbitControls — Three.js examples — Licencia MIT
