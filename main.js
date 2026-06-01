@@ -777,6 +777,25 @@
   }
   // Siglos julianos desde J2000 hasta AHORA (se recalcula al abrir la pagina -> siempre el momento real).
   const T_NOW = (Date.now() / 86400000 + 2440587.5 - 2451545.0) / 36525;
+  const JD_AT_LOAD = Date.now() / 86400000 + 2440587.5;        // dia juliano al abrir la pagina
+
+  // Periodos de rotacion SIDEREA (dias) y sentido retrogrado. La rotacion se calcula desde el
+  // tiempo simulado absoluto -> va a la velocidad REAL y se ajusta correctamente al acelerar.
+  const ROT_DAYS = { sol: 25.38, mercurio: 58.646, venus: 243.025, tierra: 0.99726968, marte: 1.02595676, jupiter: 0.41354, saturno: 0.44401, urano: 0.71833, neptuno: 0.67125 };
+  const ROT_RETRO = { venus: true, urano: true };
+  const EARTH_ROT_OFFSET_DEG = 0;   // ajuste fino del dia/noche de la Tierra (grados), por si hiciera falta
+
+  function updateRotations() {
+    const jd = JD_AT_LOAD + simTime * 365.25;   // dia juliano simulado actual
+    for (let i = 0; i < BODIES.length; i++) {
+      const b = BODIES[i];
+      const rd = ROT_DAYS[b.id];
+      if (!rd || !b.mesh) continue;
+      const dir = ROT_RETRO[b.id] ? -1 : 1;
+      const turns = jd / rd;
+      b.mesh.rotation.y = (b.rotPhase || 0) + dir * 2 * Math.PI * (turns - Math.floor(turns));
+    }
+  }
 
   function initPhysics() {
     BODIES.forEach((b, i) => {
@@ -803,6 +822,18 @@
     const p = new THREE.Vector3();
     BODIES.forEach((b) => { if (b !== sun) p.addScaledVector(b.vel, b.massSolar); });
     sun.vel.copy(p).multiplyScalar(-1 / sun.massSolar);
+
+    // fase de rotacion de la Tierra para que el dia/noche coincida con la hora real de AHORA
+    const earth = BODIES.find((b) => b.id === "tierra");
+    if (earth) {
+      const alphaSun = Math.atan2(sun.pos.z - earth.pos.z, sun.pos.x - earth.pos.x); // direccion al Sol
+      const utHours = ((JD_AT_LOAD + 0.5) % 1) * 24;          // hora UTC actual
+      let lss = 180 - 15.0 * utHours;                          // longitud subsolar (grados este)
+      lss = ((lss % 360) + 540) % 360 - 180;
+      const desiredR = alphaSun + (lss + EARTH_ROT_OFFSET_DEG) * Math.PI / 180;
+      const turns0 = JD_AT_LOAD / ROT_DAYS.tierra;
+      earth.rotPhase = desiredR - 2 * Math.PI * (turns0 - Math.floor(turns0));
+    }
 
     syncMeshes();
   }
@@ -1107,14 +1138,9 @@
       const dt = simYears / n;
       for (let k = 0; k < n; k++) stepVerlet(dt);
       syncMeshes();
-      // rotacion estetica sobre el eje
-      BODIES.forEach((b) => {
-        const dir = (b.id === "venus" || b.id === "urano") ? -1 : 1;
-        const sp = /gigante/i.test(b.type) ? 0.8 : 0.35;
-        b.mesh.rotation.y += dir * sp * simYears * 3;
-      });
     }
 
+    updateRotations();
     updateMoons();
     updateSpacecraft();
     BODIES.forEach(updateOrbitEllipse);   // la linea de orbita sigue la orbita real del planeta
