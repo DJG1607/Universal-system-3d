@@ -42,6 +42,7 @@
   let simTime = 0;                        // tiempo simulado acumulado (años)
   const MOONS = [];                       // lunas (satelites)
   const PROBES = [];                      // sondas y naves humanas
+  const BELTS = [];                       // cinturones (asteroides y Kuiper)
   let bodiesAndMoons = [];                // planetas + lunas + sondas (lista/etiquetas)
 
   const dom = {
@@ -120,6 +121,54 @@
       if (body.id === "jupiter") { // Gran Mancha Roja
         x.fillStyle = "rgba(170,60,30,0.8)";
         x.beginPath(); x.ellipse(360, 165, 34, 16, 0, 0, 7); x.fill();
+      }
+    } else if (body.isMoon || body.dwarf) {
+      if (body.id === "io") {
+        // Io: superficie volcanica (amarillo/naranja con manchas negras y rojas, sin crateres)
+        x.fillStyle = rgbStr(base, 1); x.fillRect(0, 0, 512, 256);
+        for (let i = 0; i < 70; i++) {                 // llanuras de azufre claras
+          const px = Math.random() * 512, py = Math.random() * 256, r = 14 + Math.random() * 55;
+          x.fillStyle = rgbStr(base, 1.1 + Math.random() * 0.25, 0.16);
+          x.beginPath(); x.arc(px, py, r, 0, 7); x.fill();
+        }
+        for (let i = 0; i < 120; i++) {                // centros volcanicos oscuros / rojos
+          const px = Math.random() * 512, py = Math.random() * 256, r = 1.5 + Math.random() * Math.random() * 13;
+          x.fillStyle = (Math.random() < 0.4) ? `rgba(45,28,16,${0.45 + Math.random() * 0.4})` : `rgba(150,55,30,${0.3 + Math.random() * 0.35})`;
+          x.beginPath(); x.arc(px, py, r, 0, 7); x.fill();
+        }
+      } else if (body.id === "titan") {
+        // Titan: bruma naranja suave con dunas oscuras y una region clara tipo Xanadu
+        const tg = x.createLinearGradient(0, 0, 0, 256);
+        tg.addColorStop(0, rgbStr(base, 0.78)); tg.addColorStop(0.5, rgbStr(base, 1.05)); tg.addColorStop(1, rgbStr(base, 0.78));
+        x.fillStyle = tg; x.fillRect(0, 0, 512, 256);
+        for (let i = 0; i < 26; i++) {                 // dunas oscuras ecuatoriales
+          const px = Math.random() * 512, py = 92 + Math.random() * 72, r = 24 + Math.random() * 66;
+          x.fillStyle = rgbStr(base, 0.6, 0.1);
+          x.beginPath(); x.ellipse(px, py, r, r * 0.5, 0, 0, 7); x.fill();
+        }
+        for (let i = 0; i < 7; i++) {                  // regiones brillantes
+          const px = Math.random() * 512, py = 100 + Math.random() * 56, r = 30 + Math.random() * 50;
+          x.fillStyle = rgbStr(base, 1.22, 0.1);
+          x.beginPath(); x.arc(px, py, r, 0, 7); x.fill();
+        }
+      } else {
+        // generico: cuerpo con crateres (sombra + borde iluminado)
+        x.fillStyle = rgbStr(base, 1); x.fillRect(0, 0, 512, 256);
+        for (let i = 0; i < 60; i++) {                 // parches de terreno
+          const px = Math.random() * 512, py = Math.random() * 256, r = 16 + Math.random() * 70;
+          x.fillStyle = rgbStr(base, 0.8 + Math.random() * 0.45, 0.12);
+          x.beginPath(); x.arc(px, py, r, 0, 7); x.fill();
+        }
+        for (let i = 0; i < 130; i++) {                // crateres
+          const px = Math.random() * 512, py = Math.random() * 256;
+          const r = 2 + Math.random() * Math.random() * 20;
+          x.fillStyle = rgbStr(base, 0.55, 0.55);
+          x.beginPath(); x.arc(px, py, r, 0, 7); x.fill();
+          x.fillStyle = rgbStr(base, 0.78, 0.5);
+          x.beginPath(); x.arc(px - r * 0.12, py - r * 0.12, r * 0.82, 0, 7); x.fill();
+          x.strokeStyle = rgbStr(base, 1.4, 0.6); x.lineWidth = Math.max(0.6, r * 0.14);
+          x.beginPath(); x.arc(px, py, r * 0.96, 0, 7); x.stroke();
+        }
       }
     } else {
       // rocoso: base + moteado
@@ -321,6 +370,7 @@
     buildBodies();
     buildMoons();
     buildSpacecraft();
+    buildBelts();
     updateOrbits();   // estilo de orbitas para el modo tamaño real (siempre activo)
     initPhysics();
     buildList();
@@ -355,6 +405,30 @@
     const sky = new THREE.Mesh(geo, mat);
     sky.renderOrder = -1;        // se dibuja al fondo de todo
     scene.add(sky);
+  }
+
+  // ========================= CINTURONES (asteroides y Kuiper) =========================
+  function buildBelt(innerAU, outerAU, halfThick, color, size, opacity, periodYears) {
+    const N = 6000, inner = innerAU * AU_IN_UNITS, outer = outerAU * AU_IN_UNITS;
+    const pos = new Float32Array(N * 3);
+    for (let i = 0; i < N; i++) {
+      const r = inner + Math.random() * (outer - inner);
+      const th = Math.random() * Math.PI * 2;
+      const hy = (Math.random() - 0.5) * 2 * halfThick;   // grosor del disco
+      pos[i * 3] = Math.cos(th) * r;
+      pos[i * 3 + 1] = hy;
+      pos[i * 3 + 2] = Math.sin(th) * r;
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    const m = new THREE.PointsMaterial({ color: color, size: size, sizeAttenuation: false, transparent: true, opacity: opacity, depthWrite: false });
+    const pts = new THREE.Points(g, m);
+    BODIES[0].group.add(pts);            // cuelga del Sol (lo sigue)
+    BELTS.push({ pts: pts, rate: 2 * Math.PI / periodYears });
+  }
+  function buildBelts() {
+    buildBelt(2.1, 3.3, 8, 0x9b8a72, 1.5, 0.5, 4.5);    // cinturon de asteroides (entre Marte y Jupiter)
+    buildBelt(30, 50, 35, 0x9fb2cc, 1.6, 0.5, 253);     // cinturon de Kuiper (mas alla de Neptuno)
   }
 
   // ========================= CUERPOS =========================
@@ -502,31 +576,39 @@
   function updateOrbitEllipse(b) {
     if (!b.orbit || !b.pos) return;
     const sun = BODIES[0];
-    const rx = b.pos.x - sun.pos.x, rz = b.pos.z - sun.pos.z;          // posicion relativa al Sol (UA)
-    const vx = b.vel.x - sun.vel.x, vz = b.vel.z - sun.vel.z;          // velocidad relativa (UA/año)
-    const r = Math.hypot(rx, rz) || 1e-9;
-    const v2 = vx * vx + vz * vz;
-    const mu = G * (sun.massSolar + b.massSolar);                      // parametro gravitatorio
-    const a = -mu / (2 * (v2 / 2 - mu / r));                           // semieje mayor
+    const rx = b.pos.x - sun.pos.x, ry = b.pos.y - sun.pos.y, rz = b.pos.z - sun.pos.z; // pos relativa al Sol
+    const vx = b.vel.x - sun.vel.x, vy = b.vel.y - sun.vel.y, vz = b.vel.z - sun.vel.z; // vel relativa
+    const r = Math.hypot(rx, ry, rz) || 1e-9;
+    const v2 = vx * vx + vy * vy + vz * vz;
+    const mu = G * (sun.massSolar + b.massSolar);
+    const a = -mu / (2 * (v2 / 2 - mu / r));
     if (!isFinite(a) || a <= 0) return;
-    const rv = rx * vx + rz * vz;
-    const cc = v2 - mu / r;
-    const ex = (cc * rx - rv * vx) / mu, ez = (cc * rz - rv * vz) / mu; // vector excentricidad
-    const e = Math.hypot(ex, ez);
-    if (e >= 0.98) return;                                             // proteccion (no eliptica)
-    const omega = Math.atan2(ez, ex);                                  // direccion del periapsis
-    const phiNow = Math.atan2(rz, rx);                                 // angulo actual del planeta
-    const thetaNow = phiNow - omega;                                   // anomalia verdadera actual
-    const p = a * (1 - e * e);                                         // semi-latus rectum
+    // momento angular h = r x v  (normal al plano orbital -> da la inclinacion)
+    const hx = ry * vz - rz * vy, hy = rz * vx - rx * vz, hz = rx * vy - ry * vx;
+    const hm = Math.hypot(hx, hy, hz) || 1e-9;
+    // vector excentricidad  e = (v x h)/mu - r/|r|
+    const ex = (vy * hz - vz * hy) / mu - rx / r;
+    const ey = (vz * hx - vx * hz) / mu - ry / r;
+    const ez = (vx * hy - vy * hx) / mu - rz / r;
+    const e = Math.hypot(ex, ey, ez);
+    if (e >= 0.98) return;
+    const p = a * (1 - e * e);
+    // base ortonormal del plano orbital: P (hacia el periapsis), Q (perpendicular en el plano)
+    let Px, Py, Pz;
+    if (e > 1e-6) { Px = ex / e; Py = ey / e; Pz = ez / e; }
+    else { Px = rx / r; Py = ry / r; Pz = rz / r; }
+    const hX = hx / hm, hY = hy / hm, hZ = hz / hm;
+    const Qx = hY * Pz - hZ * Py, Qy = hZ * Px - hX * Pz, Qz = hX * Py - hY * Px;
+    const thetaNow = Math.atan2(rx * Qx + ry * Qy + rz * Qz, rx * Px + ry * Py + rz * Pz); // anomalia verdadera
     const attr = b.orbit.geometry.attributes.position, arr = attr.array, n = attr.count;
     const dth = (Math.PI * 2) / (n - 1);
     for (let i = 0; i < n; i++) {
       const th = thetaNow + i * dth;                                   // i=0 -> el planeta exacto
-      const rr = p / (1 + e * Math.cos(th));
-      const phi = phiNow + i * dth;
-      arr[i * 3] = Math.cos(phi) * rr * AU_IN_UNITS;
-      arr[i * 3 + 1] = 0;
-      arr[i * 3 + 2] = Math.sin(phi) * rr * AU_IN_UNITS;
+      const rr = (p / (1 + e * Math.cos(th))) * AU_IN_UNITS;
+      const c = Math.cos(th), s = Math.sin(th);
+      arr[i * 3]     = (Px * c + Qx * s) * rr;
+      arr[i * 3 + 1] = (Py * c + Qy * s) * rr;
+      arr[i * 3 + 2] = (Pz * c + Qz * s) * rr;
     }
     attr.needsUpdate = true;
   }
@@ -750,6 +832,12 @@
     saturno:  { a:[9.53667594,-0.00125060], e:[0.05386179,-0.00050991], i:[2.48599187,0.00193609], L:[49.95424423,1222.49362201], wbar:[92.59887831,-0.41897216], Om:[113.66242448,-0.28867794] },
     urano:    { a:[19.18916464,-0.00196176], e:[0.04725744,-0.00004397], i:[0.77263783,-0.00242939], L:[313.23810451,428.48202785], wbar:[170.95427630,0.40805281], Om:[74.01692503,0.04240589] },
     neptuno:  { a:[30.06992276,0.00026291], e:[0.00859048,0.00005105], i:[1.77004347,0.00035372], L:[-55.12002969,218.45945325], wbar:[44.96476227,-0.32241464], Om:[131.78422574,-0.00508664] },
+    // planetas enanos: i=0 (orbita aplanada a la ecliptica para conservar la distancia real). Ldot=36000/periodo_años.
+    ceres:    { a:[2.7658,0], e:[0.0785,0], i:[10.59,0], L:[249.9, 7824.4], wbar:[153.9,0], Om:[80.3,0] },
+    pluton:   { a:[39.482,0], e:[0.2488,0], i:[17.16,0], L:[238.9, 145.2], wbar:[224.06,0], Om:[110.30,0] },
+    haumea:   { a:[43.22,0], e:[0.191,0], i:[28.21,0], L:[219.1, 126.7], wbar:[0.9,0], Om:[121.9,0] },
+    makemake: { a:[45.43,0], e:[0.159,0], i:[28.98,0], L:[180.1, 117.6], wbar:[14.6,0], Om:[79.4,0] },
+    eris:     { a:[67.78,0], e:[0.4418,0], i:[44.04,0], L:[32.99, 64.5], wbar:[187.0,0], Om:[35.95,0] },
   };
 
   // Estado real (posicion + velocidad heliocentricas) proyectado al plano de la ecliptica (UA, UA/año).
@@ -770,10 +858,14 @@
     const xp = a * (Math.cos(E) - e), yp = a * bb * Math.sin(E);       // plano orbital (UA)
     const n = 2 * Math.PI / Math.pow(a, 1.5), Edot = n / (1 - e * Math.cos(E));
     const xpd = -a * Math.sin(E) * Edot, ypd = a * bb * Math.cos(E) * Edot;
-    const cw = Math.cos(omega), sw = Math.sin(omega), cO = Math.cos(Om), sO = Math.sin(Om), ci = Math.cos(I);
+    const cw = Math.cos(omega), sw = Math.sin(omega), cO = Math.cos(Om), sO = Math.sin(Om), ci = Math.cos(I), si = Math.sin(I);
     const m11 = cw * cO - sw * sO * ci, m12 = -sw * cO - cw * sO * ci;
     const m21 = cw * sO + sw * cO * ci, m22 = -sw * sO + cw * cO * ci;
-    return { px: m11 * xp + m12 * yp, pz: m21 * xp + m22 * yp, vx: m11 * xpd + m12 * ypd, vz: m21 * xpd + m22 * ypd };
+    const m31 = sw * si, m32 = cw * si;   // componente fuera de la ecliptica (Z) -> eje Y de la escena
+    return {
+      px: m11 * xp + m12 * yp, py: m31 * xp + m32 * yp, pz: m21 * xp + m22 * yp,
+      vx: m11 * xpd + m12 * ypd, vy: m31 * xpd + m32 * ypd, vz: m21 * xpd + m22 * ypd,
+    };
   }
   // Siglos julianos desde J2000 hasta AHORA (se recalcula al abrir la pagina -> siempre el momento real).
   const T_NOW = (Date.now() / 86400000 + 2440587.5 - 2451545.0) / 36525;
@@ -781,8 +873,9 @@
 
   // Periodos de rotacion SIDEREA (dias) y sentido retrogrado. La rotacion se calcula desde el
   // tiempo simulado absoluto -> va a la velocidad REAL y se ajusta correctamente al acelerar.
-  const ROT_DAYS = { sol: 25.38, mercurio: 58.646, venus: 243.025, tierra: 0.99726968, marte: 1.02595676, jupiter: 0.41354, saturno: 0.44401, urano: 0.71833, neptuno: 0.67125 };
-  const ROT_RETRO = { venus: true, urano: true };
+  const ROT_DAYS = { sol: 25.38, mercurio: 58.646, venus: 243.025, tierra: 0.99726968, marte: 1.02595676, jupiter: 0.41354, saturno: 0.44401, urano: 0.71833, neptuno: 0.67125,
+    ceres: 0.378, pluton: 6.387, haumea: 0.163, makemake: 0.9375, eris: 1.079 };
+  const ROT_RETRO = { venus: true, urano: true, pluton: true };
   const EARTH_ROT_OFFSET_DEG = 0;   // ajuste fino del dia/noche de la Tierra (grados), por si hiciera falta
 
   function updateRotations() {
@@ -806,9 +899,9 @@
       } else {
         const el = PLANET_ELEMENTS[b.id];
         if (el) {
-          const s = realPlanetState(el, T_NOW);   // posicion y velocidad reales de HOY
-          b.pos = new THREE.Vector3(s.px, 0, s.pz);
-          b.vel = new THREE.Vector3(s.vx, 0, s.vz);
+          const s = realPlanetState(el, T_NOW);   // posicion y velocidad reales de HOY (3D, con inclinacion)
+          b.pos = new THREE.Vector3(s.px, s.py, s.pz);
+          b.vel = new THREE.Vector3(s.vx, s.vy, s.vz);
         } else {
           const a = b.a_AU, th = i * 2.39996323;  // respaldo: reparto circular
           b.pos = new THREE.Vector3(Math.cos(th) * a, 0, Math.sin(th) * a);
@@ -966,6 +1059,8 @@
         M.push({ k: "Periodo orbital", v: b.orbital_period });
         M.push({ k: "Vel. orbital", v: `${b.orbital_velocity} km/s` });
         M.push({ k: "Excentricidad", v: b.eccentricity.toFixed(4) });
+        const _el = (typeof PLANET_ELEMENTS !== "undefined") ? PLANET_ELEMENTS[b.id] : null;
+        if (_el) M.push({ k: "Inclinación orbital", v: `${_el.i[0].toFixed(2)}°` });
       }
       M.push({ k: "Rotacion", v: b.rotation_period });
       M.push({ k: "Inclinacion eje", v: `${b.axial_tilt}°` });
@@ -1057,6 +1152,8 @@
     dom.infoClose.addEventListener("click", () => {
       dom.info.classList.add("hidden");
       selected = null;
+      followBody = null;
+      flight = null;
       bodiesAndMoons.forEach((x) => x.li && x.li.classList.remove("active"));
     });
     dom.speed.addEventListener("input", () => {
@@ -1141,6 +1238,7 @@
     }
 
     updateRotations();
+    for (let bi = 0; bi < BELTS.length; bi++) BELTS[bi].pts.rotation.y = BELTS[bi].rate * simTime;  // giro lento de los cinturones
     updateMoons();
     updateSpacecraft();
     BODIES.forEach(updateOrbitEllipse);   // la linea de orbita sigue la orbita real del planeta
@@ -1154,7 +1252,11 @@
   initScene();
   // seleccionar la Tierra por defecto para mostrar el panel
   const earth = BODIES.find((b) => b.id === "tierra");
-  if (earth) showInfo(earth);
+  if (earth) {
+    selected = earth;
+    earth.li && earth.li.classList.add("active");
+    showInfo(earth);
+  }
   animate();
 
   // ocultar el loader

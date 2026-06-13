@@ -9,6 +9,14 @@ fondo estelar de la Via Lactea:
   Las imágenes están incrustadas en base64 dentro de "textures.js" para que
   la aplicación funcione sin conexión a internet.
 
+Texturas de los planetas enanos (Ceres, Eris, Haumea, Makemake):
+  © Solar System Scope (CC BY 4.0).
+
+Mapas de superficie de las lunas (Europa, Encélado, Rea, Mimas, Dione, Tetis,
+Jápeto, Tritón, Fobos): mosaicos de NASA / JPL / USGS / ESA (dominio público),
+obtenidos de Wikimedia Commons. El resto de lunas y Plutón usan una textura
+procedural de cráteres generada por el programa.
+
 Imágenes de las sondas y naves (renders e ilustraciones):
   NASA / JPL-Caltech, ESA, JAXA, CNSA y MBRSC, obtenidas de Wikimedia Commons.
   La mayoría son obras de la NASA (dominio público); el resto bajo licencias
